@@ -1,0 +1,1252 @@
+import { useState } from "react";
+import "./App.css";
+
+function App() {
+  const [file, setFile] = useState(null);
+  const [jobDescription, setJobDescription] = useState("");
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // =========================
+  // FILE UPLOAD
+  // =========================
+
+  const handleFileChange = (event) => {
+    const selectedFile = event.target.files[0];
+
+    if (!selectedFile) return;
+
+    if (selectedFile.type !== "application/pdf") {
+      setError("Please upload a PDF resume.");
+      setFile(null);
+      return;
+    }
+
+    setFile(selectedFile);
+    setError("");
+    setResult(null);
+  };
+
+  // =========================
+  // ANALYZE RESUME
+  // =========================
+
+  const analyzeResume = async () => {
+    if (!file) {
+      setError("Please upload your resume first.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setResult(null);
+
+    const formData = new FormData();
+
+    formData.append("file", file);
+
+    let endpoint = "http://127.0.0.1:8000/upload-resume";
+
+    if (jobDescription.trim()) {
+      endpoint = "http://127.0.0.1:8000/analyze-job";
+
+      formData.append(
+        "job_description",
+        jobDescription
+      );
+    }
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Analysis failed");
+      }
+
+      const data = await response.json();
+
+      console.log("Backend response:", data);
+
+      setResult(data);
+
+      setTimeout(() => {
+        document
+          .getElementById("results")
+          ?.scrollIntoView({
+            behavior: "smooth",
+          });
+      }, 200);
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        "Could not connect to the backend. Make sure FastAPI is running."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =========================
+  // RESULT DATA
+  // =========================
+
+  const resumeScore =
+    Number(
+      result?.resume_score ??
+      result?.score ??
+      0
+    );
+
+  const skills =
+    result?.resume_skills ??
+    result?.skills ??
+    [];
+
+  const strengths =
+    result?.feedback?.strengths ??
+    [];
+
+  const weaknesses =
+    result?.feedback?.weaknesses ??
+    [];
+
+  const suggestions =
+    result?.feedback?.suggestions ??
+    [];
+
+  const jobMatch =
+    result?.job_match;
+
+  // =========================
+  // SCORE STATUS
+  // =========================
+
+  const getScoreStatus = (score) => {
+    if (score >= 80) {
+      return {
+        title: "Excellent Resume!",
+        label: "Excellent",
+        message:
+          "Your resume is strong and well prepared for job applications.",
+        className: "excellent",
+      };
+    }
+
+    if (score >= 60) {
+      return {
+        title: "Good Resume",
+        label: "Good",
+        message:
+          "Your resume has a good foundation, but there is room for improvement.",
+        className: "good",
+      };
+    }
+
+    return {
+      title: "Needs Improvement",
+      label: "Needs Improvement",
+      message:
+        "Your resume needs some improvements before you apply for jobs.",
+      className: "needs-improvement",
+    };
+  };
+
+  const scoreStatus =
+    getScoreStatus(resumeScore);
+
+  // =========================
+  // DOWNLOAD REPORT
+  // =========================
+
+  const downloadReport = () => {
+    const report = `
+========================================
+              RESUME AI
+           ANALYSIS REPORT
+========================================
+
+OVERALL SCORE
+-------------
+${resumeScore}/100
+
+STATUS
+------
+${scoreStatus.label}
+
+${scoreStatus.message}
+
+
+DETECTED SKILLS
+---------------
+${
+  skills.length > 0
+    ? skills.join(", ")
+    : "No skills detected."
+}
+
+
+STRENGTHS
+---------
+${
+  strengths.length > 0
+    ? strengths
+        .map(
+          (item, index) =>
+            `${index + 1}. ${item}`
+        )
+        .join("\n")
+    : "No strengths detected."
+}
+
+
+WEAKNESSES
+----------
+${
+  weaknesses.length > 0
+    ? weaknesses
+        .map(
+          (item, index) =>
+            `${index + 1}. ${item}`
+        )
+        .join("\n")
+    : "No weaknesses detected."
+}
+
+
+SUGGESTIONS
+-----------
+${
+  suggestions.length > 0
+    ? suggestions
+        .map(
+          (item, index) =>
+            `${index + 1}. ${item}`
+        )
+        .join("\n")
+    : "No suggestions available."
+}
+
+
+${
+  jobMatch
+    ? `
+JOB MATCH
+---------
+
+Match Score:
+${jobMatch.match_score ?? 0}%
+
+Matching Skills:
+${
+  jobMatch.matching_skills?.length > 0
+    ? jobMatch.matching_skills.join(", ")
+    : "None"
+}
+
+Missing Skills:
+${
+  jobMatch.missing_skills?.length > 0
+    ? jobMatch.missing_skills.join(", ")
+    : "None"
+}
+`
+    : ""
+}
+
+========================================
+Generated by ResumeAI
+========================================
+`;
+
+    const blob = new Blob(
+      [report],
+      {
+        type: "text/plain",
+      }
+    );
+
+    const url =
+      URL.createObjectURL(blob);
+
+    const link =
+      document.createElement("a");
+
+    link.href = url;
+
+    link.download =
+      "resume-analysis-report.txt";
+
+    document.body.appendChild(link);
+
+    link.click();
+
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="app">
+
+      {/* =================================
+          NAVBAR
+      ================================= */}
+
+      <nav className="navbar">
+
+        <div className="logo">
+
+          <span className="logo-icon">
+            ✦
+          </span>
+
+          Resume
+          <span className="blue">
+            AI
+          </span>
+
+        </div>
+
+        <div className="nav-links">
+
+          <a href="#home">
+            Home
+          </a>
+
+          <a href="#features">
+            Features
+          </a>
+
+          <a href="#analyzer">
+            Analyzer
+          </a>
+
+          <a
+            href="#analyzer"
+            className="nav-button"
+          >
+            Try Now
+          </a>
+
+        </div>
+
+      </nav>
+
+
+      {/* =================================
+          HERO
+      ================================= */}
+
+      <section
+        className="hero"
+        id="home"
+      >
+
+        <div className="hero-glow glow-one"></div>
+
+        <div className="hero-glow glow-two"></div>
+
+        <div className="hero-content">
+
+          <div className="ai-badge">
+
+            <span className="pulse"></span>
+
+            AI-Powered Resume Analysis
+
+          </div>
+
+          <h1>
+
+            Your Resume.
+
+            <br />
+
+            <span>
+              Smarter. Stronger. Better.
+            </span>
+
+          </h1>
+
+          <p>
+            Analyze your resume, discover your
+            strengths, identify missing skills and
+            measure your compatibility with your
+            dream job.
+          </p>
+
+          <div className="hero-buttons">
+
+            <a
+              href="#analyzer"
+              className="primary-button"
+            >
+              Analyze My Resume
+              <span>→</span>
+            </a>
+
+            <a
+              href="#features"
+              className="secondary-button"
+            >
+              Explore Features
+            </a>
+
+          </div>
+
+          <div className="hero-stats">
+
+            <div>
+              <strong>AI</strong>
+              <span>Analysis</span>
+            </div>
+
+            <div>
+              <strong>PDF</strong>
+              <span>Support</span>
+            </div>
+
+            <div>
+              <strong>100%</strong>
+              <span>Free</span>
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      {/* =================================
+          FEATURES
+      ================================= */}
+
+      <section
+        className="features"
+        id="features"
+      >
+
+        <div className="section-header">
+
+          <div className="section-label">
+            POWERFUL FEATURES
+          </div>
+
+          <h2>
+            Everything You Need
+            <span> to Improve</span>
+          </h2>
+
+          <p>
+            Get actionable insights from your
+            resume in seconds.
+          </p>
+
+        </div>
+
+        <div className="feature-grid">
+
+          <div className="feature-card">
+
+            <div className="feature-number">
+              01
+            </div>
+
+            <div className="feature-icon">
+              ◉
+            </div>
+
+            <h3>
+              Resume Score
+            </h3>
+
+            <p>
+              Get a clear score that shows how
+              strong your resume is.
+            </p>
+
+          </div>
+
+          <div className="feature-card">
+
+            <div className="feature-number">
+              02
+            </div>
+
+            <div className="feature-icon">
+              ◆
+            </div>
+
+            <h3>
+              Skill Detection
+            </h3>
+
+            <p>
+              Automatically detect technical
+              skills from your resume.
+            </p>
+
+          </div>
+
+          <div className="feature-card">
+
+            <div className="feature-number">
+              03
+            </div>
+
+            <div className="feature-icon">
+              ◎
+            </div>
+
+            <h3>
+              Job Matching
+            </h3>
+
+            <p>
+              Compare your resume against any
+              job description.
+            </p>
+
+          </div>
+
+          <div className="feature-card">
+
+            <div className="feature-number">
+              04
+            </div>
+
+            <div className="feature-icon">
+              ✦
+            </div>
+
+            <h3>
+              Smart Suggestions
+            </h3>
+
+            <p>
+              Discover practical ways to improve
+              your resume.
+            </p>
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      {/* =================================
+          ANALYZER
+      ================================= */}
+
+      <section
+        className="analyzer"
+        id="analyzer"
+      >
+
+        <div className="section-header">
+
+          <div className="section-label">
+            RESUME ANALYZER
+          </div>
+
+          <h2>
+            Let's Analyze Your
+            <span> Resume</span>
+          </h2>
+
+          <p>
+            Upload your resume and optionally
+            add a job description.
+          </p>
+
+        </div>
+
+
+        <div className="analyzer-box">
+
+          {/* JOB DESCRIPTION */}
+
+          <div className="input-section">
+
+            <div className="input-heading">
+
+              <div className="input-icon">
+                ✦
+              </div>
+
+              <div>
+
+                <h3>
+                  Job Description
+                </h3>
+
+                <p>
+                  Optional — improve your
+                  job match score
+                </p>
+
+              </div>
+
+            </div>
+
+            <textarea
+              value={jobDescription}
+              onChange={(event) =>
+                setJobDescription(
+                  event.target.value
+                )
+              }
+              placeholder="Paste the job description here..."
+              rows="7"
+            />
+
+          </div>
+
+
+          <div className="divider">
+
+            <span>
+              AND
+            </span>
+
+          </div>
+
+
+          {/* UPLOAD */}
+
+          <div className="upload-section">
+
+            <div className="upload-symbol">
+              ↑
+            </div>
+
+            <h3>
+              Upload Your Resume
+            </h3>
+
+            <p>
+              PDF files only
+            </p>
+
+            <label className="upload-button">
+
+              Choose Resume
+
+              <input
+                type="file"
+                accept=".pdf"
+                onChange={handleFileChange}
+              />
+
+            </label>
+
+
+            {file && (
+
+              <div className="file-success">
+
+                <span>✓</span>
+
+                {file.name}
+
+              </div>
+
+            )}
+
+
+            <button
+              className="analyze-button"
+              onClick={analyzeResume}
+              disabled={loading}
+            >
+
+              {loading
+                ? "Analyzing Resume..."
+                : "Analyze Resume →"}
+
+            </button>
+
+
+            {error && (
+
+              <div className="error">
+                {error}
+              </div>
+
+            )}
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      {/* =================================
+          RESULTS
+      ================================= */}
+
+      {result && (
+
+        <section
+          className="results"
+          id="results"
+        >
+
+          <div className="section-header">
+
+            <div className="section-label">
+              ANALYSIS COMPLETE
+            </div>
+
+            <h2>
+              Your Resume
+              <span> Results</span>
+            </h2>
+
+          </div>
+
+
+          {/* SCORE PANEL */}
+
+          <div className="score-panel">
+
+            <div
+              className="score-ring"
+              style={{
+                "--score":
+                  `${Math.min(
+                    Math.max(
+                      resumeScore,
+                      0
+                    ),
+                    100
+                  ) * 3.6}deg`,
+              }}
+            >
+
+              <div className="score-inner">
+
+                <strong>
+                  {resumeScore}
+                </strong>
+
+                <span>
+                  /100
+                </span>
+
+              </div>
+
+            </div>
+
+
+            <div className="score-content">
+
+              <div className="score-label">
+                OVERALL SCORE
+              </div>
+
+              <h3>
+                {scoreStatus.title}
+              </h3>
+
+              <div
+                className={
+                  `score-status ${scoreStatus.className}`
+                }
+              >
+
+                <span>
+
+                  {scoreStatus.className ===
+                    "excellent" && "✓"}
+
+                  {scoreStatus.className ===
+                    "good" && "●"}
+
+                  {scoreStatus.className ===
+                    "needs-improvement" && "!"}
+
+                </span>
+
+                <span>
+                  {scoreStatus.label}
+                </span>
+
+              </div>
+
+              <p>
+                {scoreStatus.message}
+              </p>
+
+              <div className="score-progress">
+
+                <div
+                  style={{
+                    width:
+                      `${Math.min(
+                        Math.max(
+                          resumeScore,
+                          0
+                        ),
+                        100
+                      )}%`,
+                  }}
+                />
+
+              </div>
+
+            </div>
+
+          </div>
+
+
+          {/* SKILLS */}
+
+          <div className="result-card">
+
+            <div className="result-heading">
+
+              <div>
+
+                <span>
+                  SKILLS
+                </span>
+
+                <h3>
+                  Detected Skills
+                </h3>
+
+              </div>
+
+              <div className="count">
+                {skills.length}
+              </div>
+
+            </div>
+
+
+            {skills.length > 0 ? (
+
+              <div className="skills">
+
+                {skills.map(
+                  (skill, index) => (
+
+                    <span
+                      key={index}
+                      className="skill"
+                    >
+                      {skill}
+                    </span>
+
+                  )
+                )}
+
+              </div>
+
+            ) : (
+
+              <p>
+                No skills detected.
+              </p>
+
+            )}
+
+          </div>
+
+
+          {/* STRENGTHS + WEAKNESSES */}
+
+          <div className="result-grid">
+
+            <div className="result-card strength-card">
+
+              <div className="result-heading">
+
+                <div>
+
+                  <span>
+                    POSITIVE
+                  </span>
+
+                  <h3>
+                    Strengths
+                  </h3>
+
+                </div>
+
+                <div className="result-icon">
+                  ✓
+                </div>
+
+              </div>
+
+
+              {strengths.length > 0 ? (
+
+                <ul>
+
+                  {strengths.map(
+                    (item, index) => (
+
+                      <li key={index}>
+                        {item}
+                      </li>
+
+                    )
+                  )}
+
+                </ul>
+
+              ) : (
+
+                <p>
+                  No strengths detected.
+                </p>
+
+              )}
+
+            </div>
+
+
+            <div className="result-card weakness-card">
+
+              <div className="result-heading">
+
+                <div>
+
+                  <span>
+                    NEEDS WORK
+                  </span>
+
+                  <h3>
+                    Weaknesses
+                  </h3>
+
+                </div>
+
+                <div className="result-icon">
+                  !
+                </div>
+
+              </div>
+
+
+              {weaknesses.length > 0 ? (
+
+                <ul>
+
+                  {weaknesses.map(
+                    (item, index) => (
+
+                      <li key={index}>
+                        {item}
+                      </li>
+
+                    )
+                  )}
+
+                </ul>
+
+              ) : (
+
+                <p>
+                  No weaknesses detected.
+                </p>
+
+              )}
+
+            </div>
+
+          </div>
+
+
+          {/* SUGGESTIONS */}
+
+          <div className="result-card">
+
+            <div className="result-heading">
+
+              <div>
+
+                <span>
+                  RECOMMENDATIONS
+                </span>
+
+                <h3>
+                  How to Improve
+                </h3>
+
+              </div>
+
+              <div className="result-icon">
+                ✦
+              </div>
+
+            </div>
+
+
+            {suggestions.length > 0 ? (
+
+              <div className="suggestions">
+
+                {suggestions.map(
+                  (item, index) => (
+
+                    <div
+                      className="suggestion"
+                      key={index}
+                    >
+
+                      <div>
+                        {String(
+                          index + 1
+                        ).padStart(2, "0")}
+                      </div>
+
+                      <p>
+                        {item}
+                      </p>
+
+                    </div>
+
+                  )
+                )}
+
+              </div>
+
+            ) : (
+
+              <p>
+                No suggestions available.
+              </p>
+
+            )}
+
+          </div>
+
+
+          {/* DOWNLOAD */}
+
+          <div className="download-section">
+
+            <div className="download-icon">
+              ↓
+            </div>
+
+            <h3>
+              Ready to improve your resume?
+            </h3>
+
+            <p>
+              Download your complete analysis
+              report and use it to improve
+              your resume.
+            </p>
+
+            <button
+              className="download-button"
+              onClick={downloadReport}
+            >
+              ↓ Download Analysis Report
+            </button>
+
+          </div>
+
+
+          {/* JOB MATCH */}
+
+          {jobMatch && (
+
+            <div className="job-match">
+
+              <div className="section-header">
+
+                <div className="section-label">
+                  JOB COMPATIBILITY
+                </div>
+
+                <h2>
+                  How Well Do You
+                  <span> Match?</span>
+                </h2>
+
+              </div>
+
+
+              <div className="match-score">
+
+                <strong>
+                  {jobMatch.match_score ?? 0}%
+                </strong>
+
+                <span>
+                  JOB MATCH
+                </span>
+
+              </div>
+
+
+              <div className="result-grid">
+
+                <div className="result-card">
+
+                  <div className="result-heading">
+
+                    <div>
+
+                      <span>
+                        FOUND
+                      </span>
+
+                      <h3>
+                        Matching Skills
+                      </h3>
+
+                    </div>
+
+                    <div className="result-icon">
+                      ✓
+                    </div>
+
+                  </div>
+
+
+                  {jobMatch.matching_skills?.length > 0 ? (
+
+                    <div className="skills">
+
+                      {jobMatch.matching_skills.map(
+                        (skill, index) => (
+
+                          <span
+                            className="skill"
+                            key={index}
+                          >
+                            {skill}
+                          </span>
+
+                        )
+                      )}
+
+                    </div>
+
+                  ) : (
+
+                    <p>
+                      No matching skills.
+                    </p>
+
+                  )}
+
+                </div>
+
+
+                <div className="result-card">
+
+                  <div className="result-heading">
+
+                    <div>
+
+                      <span>
+                        MISSING
+                      </span>
+
+                      <h3>
+                        Skills to Learn
+                      </h3>
+
+                    </div>
+
+                    <div className="result-icon">
+                      +
+                    </div>
+
+                  </div>
+
+
+                  {jobMatch.missing_skills?.length > 0 ? (
+
+                    <div className="skills">
+
+                      {jobMatch.missing_skills.map(
+                        (skill, index) => (
+
+                          <span
+                            className="skill missing"
+                            key={index}
+                          >
+                            {skill}
+                          </span>
+
+                        )
+                      )}
+
+                    </div>
+
+                  ) : (
+
+                    <p>
+                      No missing skills.
+                    </p>
+
+                  )}
+
+                </div>
+
+              </div>
+
+            </div>
+
+          )}
+
+        </section>
+
+      )}
+
+
+      {/* =================================
+          FOOTER
+      ================================= */}
+
+      <footer className="footer">
+
+        <div className="logo">
+
+          <span className="logo-icon">
+            ✦
+          </span>
+
+          Resume
+          <span className="blue">
+            AI
+          </span>
+
+        </div>
+
+        <p>
+          Smart resume analysis powered by
+          React & FastAPI.
+        </p>
+
+        <div className="footer-line"></div>
+
+        <small>
+          © 2026 ResumeAI. Built for better careers.
+        </small>
+
+      </footer>
+
+    </div>
+  );
+}
+
+export default App;
